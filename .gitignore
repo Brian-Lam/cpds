@@ -1,0 +1,4 @@
+repos
+repositories/*
+!repositories/repo-grabber.py
+!repositories/repoauth.py.example
