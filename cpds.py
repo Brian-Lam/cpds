@@ -5,24 +5,25 @@ import os
 import re
 import subprocess
 import sys
-import thread
+from threading import Thread
 import requests
 import time
 import concurrent.futures
+from multiprocessing import Queue
+from multiprocessing import Lock
 from pprint import pprint
 from lxml import html
 
-# Atomic variable lock for thread pool count
-# lock = thread.allocate_lock()
-
-thread_count = 0
+# Threads waiting to process
+processing_queue = Queue(1000)
+processing_finished = False
+print_lock = Lock()
 
 ## Grab a URL from a moss call
 ## Regex Source:
 ##
 ## http://stackoverflow.com/questions/6883049/
 ##      regex-to-find-urls-in-string-in-python
-
 def get_url(response):
     urls = \
         re.findall("""http[s]?://(?:[a-zA-Z]|
@@ -30,38 +31,53 @@ def get_url(response):
             [0-9a-fA-F]))+"""
                    , response)
     if len(urls) > 0:
+        # Only one URL should be returned
         return urls[0]
     else:
+        # No results in URL - bad request
         return None
 
 
 ## Get all percentages from a moss URL
-
 def get_percentages(url):
+    # Get page content
     page = requests.get(url)
     content = page.content
+    # Find percent in content 
     percentages = re.findall('[0-9]+%', content)
     return percentages
 
 
 ## Scrape a moss URL to find the highest percentage match
-
 def get_high_percentages(url, cutoff):
+    # No high values by default
     high_score = False
     percentages = get_percentages(url)
+    # Search through resulting percentages for values past cutoff
     if len(percentages) > 0:
         for score in percentages:
             score = int(score.strip('%'))
             if score > cutoff:
+                # High value result
                 high_score = True
     return high_score
 
 
-## See if two files should be compared. Compare them if they are
+## Process queue
+def process_queue():
+    global processing_finished
+    global processing_queue
 
+    while not processing_finished:
+        row = processing_queue.get()
+        compare_files(row["new_file"], row["old_file"], row["output_filename"])
+        # processing_queue.task_done()
+
+## See if two files should be compared. Compare them if they are
 def compare_files(_old, _new, output_filename):
-    global thread_count
-    cutoff = 70
+    global print_lock
+
+    cutoff = 1
     if get_extension(_new) == get_extension(_old) and _new != _old:
         response = subprocess.check_output(['moss/moss', _new, _old])
         url = get_url(response)
@@ -86,36 +102,49 @@ def compare_files(_old, _new, output_filename):
                 for _score in percentages:
                     file.write(str(_score) + '\n')
         else:
-            print 'Okay: ' + url
+            print_lock.acquire()
+            print 'Okay: ' + url + "\n"
+            print_lock.release()
 
 
 ## Send moss request
-
 def moss_compare(new_files, old_files):
-    global thread_count
+    global processing_queue
+    global processing_finished
 
+    # Write output to file
     output_filename = sys.argv[1] + '_comp_' + sys.argv[2] + '.txt'
     print 'Writing output to ' + output_filename
 
-    executor = concurrent.futures.ProcessPoolExecutor(max_workers=10)
+    # Start threads
+    num_worker_threads = 30
+    for i in range(num_worker_threads):
+        t = Thread(target=process_queue)
+        t.daemon = True
+        t.start()
 
+    # For loop: m * n filepaths
     for _new in new_files:
         for _old in old_files:
-            futures = executor.submit(compare_files, _new, _old,
-                output_filename)
+            # Wait for queue to empty out
+            while (processing_queue.full()):
+                pass
 
-      # compare_files(_new, _old, output_filename)
+            # Submit to queue
+            processing_queue.put({"new_file": _new,
+                "old_file": _old,
+                "output_filename": output_filename})
+    
+    processing_finished = True
 
 ## Grab file extension
-
 def get_extension(file_path):
     extension = os.path.splitext(file_path)[1]
     return extension
 
 
 ## Return files with matched name
-
-def walk(substring='.php'):
+def walk(substring):
     matched_files = []
     _dir = os.getcwd() + '/repositories'
     for (root, dirs, files) in os.walk(_dir):
@@ -124,11 +153,11 @@ def walk(substring='.php'):
             if substring in path:
                 if not '.git' in path:
                     matched_files.append(path)
+
     return matched_files
 
 
 ## Usage
-
 def printUsage():
     print 'USAGE:'
     print 'python file-walker.py [new modules] [old modules]'
@@ -136,13 +165,14 @@ def printUsage():
 
 
 ## MAIN
-
 if __name__ == '__main__':
     if len(sys.argv) > 2:
         old_files = walk(sys.argv[1])
-        print 'Grabbed old files'
+        print 'Grabbed ' + str(len(old_files)) + ' old files'
+
         new_files = walk(sys.argv[2])
-        print 'Grabbed new files'
+        print 'Grabbed ' + str(len(new_files)) + ' new files '
+
         moss_compare(new_files, old_files)
     else:
         printUsage()
