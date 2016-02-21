@@ -15,7 +15,7 @@ from pprint import pprint
 from lxml import html
 
 # Threads waiting to process
-processing_queue = Queue(1000)
+processing_queue = Queue(5000)
 processing_finished = False
 print_lock = Lock()
 
@@ -35,7 +35,7 @@ def get_url(response):
         return urls[0]
     else:
         # No results in URL - bad request
-        return None
+        return ""
 
 
 ## Get all percentages from a moss URL
@@ -77,11 +77,11 @@ def process_queue():
 def compare_files(_old, _new, output_filename):
     global print_lock
 
-    cutoff = 1
+    cutoff = 50
     if get_extension(_new) == get_extension(_old) and _new != _old:
         response = subprocess.check_output(['moss/moss', _new, _old])
         url = get_url(response)
-        if url is None:
+        if url is "":
             exit
         high_score = get_high_percentages(url, cutoff)
         if high_score:
@@ -117,7 +117,7 @@ def moss_compare(new_files, old_files):
     print 'Writing output to ' + output_filename
 
     # Start threads
-    num_worker_threads = 30
+    num_worker_threads = 250
     for i in range(num_worker_threads):
         t = Thread(target=process_queue)
         t.daemon = True
