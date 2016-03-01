@@ -35,7 +35,7 @@ def get_url(response):
         return urls[0]
     else:
         # No results in URL - bad request
-        return ""
+        raise ValueError("No URL")
 
 
 ## Get all percentages from a moss URL
@@ -67,11 +67,13 @@ def get_high_percentages(url, cutoff):
 def process_queue():
     global processing_finished
     global processing_queue
-
-    while not processing_finished:
-        row = processing_queue.get()
-        compare_files(row["new_file"], row["old_file"], row["output_filename"])
-        # processing_queue.task_done()
+    try:
+        while not processing_finished:
+            row = processing_queue.get()
+            compare_files(row["new_file"], row["old_file"], row["output_filename"])
+            # processing_queue.task_done()
+    except KeyboardInterrupt:
+        raise
 
 ## See if two files should be compared. Compare them if they are
 def compare_files(_old, _new, output_filename):
@@ -79,28 +81,30 @@ def compare_files(_old, _new, output_filename):
 
     cutoff = 50
     if get_extension(_new) == get_extension(_old) and _new != _old:
-        response = subprocess.check_output(['moss/moss', _new, _old])
-        url = get_url(response)
-        if url is "":
-            exit
-        high_score = get_high_percentages(url, cutoff)
-        if high_score:
-            percentages = get_percentages(url)
-            print '****************'
-            print '***** ALERT ****'
-            print '****************'
-            print _new
-            print _old
-            for _score in percentages:
-                print _score
-            print url
-            with open(output_filename, 'a') as file:
-                file.write('******' + '\n')
-                file.write(_new + '\n')
-                file.write(_old + '\n')
-                file.write(url + '\n')
+        try:
+            response = subprocess.check_output(['moss/moss', _new, _old])
+            url = get_url(response)
+
+            high_score = get_high_percentages(url, cutoff)
+            if high_score:
+                percentages = get_percentages(url)
+                print '****************'
+                print '***** ALERT ****'
+                print '****************'
+                print _new
+                print _old
                 for _score in percentages:
-                    file.write(str(_score) + '\n')
+                    print _score
+                print url
+                with open(output_filename, 'a') as file:
+                    file.write('******' + '\n')
+                    file.write(_new + '\n')
+                    file.write(_old + '\n')
+                    file.write(url + '\n')
+                    for _score in percentages:
+                        file.write(str(_score) + '\n')
+        except Exception as e:
+            sys.exit(0)
         else:
             print_lock.acquire()
             print 'Okay: ' + url + "\n"
@@ -112,30 +116,36 @@ def moss_compare(new_files, old_files):
     global processing_queue
     global processing_finished
 
-    # Write output to file
-    output_filename = sys.argv[1] + '_comp_' + sys.argv[2] + '.txt'
-    print 'Writing output to ' + output_filename
+    try:
+        # Write output to file
+        output_filename = sys.argv[1] + '_comp_' + sys.argv[2] + '.txt'
+        print 'Writing output to ' + output_filename
 
-    # Start threads
-    num_worker_threads = 250
-    for i in range(num_worker_threads):
-        t = Thread(target=process_queue)
-        t.daemon = True
-        t.start()
+        # Start threads
+        num_worker_threads = 4
+        for i in range(num_worker_threads):
+            t = Thread(target=process_queue)
+            t.daemon = True
+            t.start()
 
-    # For loop: m * n filepaths
-    for _new in new_files:
-        for _old in old_files:
-            # Wait for queue to empty out
-            while (processing_queue.full()):
-                pass
+        # For loop: m * n filepaths
+        for _new in new_files:
+            for _old in old_files:
+                # Wait for queue to empty out
+                while (processing_queue.full()):
+                    pass
 
-            # Submit to queue
-            processing_queue.put({"new_file": _new,
-                "old_file": _old,
-                "output_filename": output_filename})
-    
-    processing_finished = True
+                # Submit to queue
+                processing_queue.put({"new_file": _new,
+                    "old_file": _old,
+                    "output_filename": output_filename})
+        
+        processing_finished = True
+    except KeyboardInterrupt as e:
+        print "cancelled"
+        processing_finished = True
+        sys.exit(0)
+
 
 ## Grab file extension
 def get_extension(file_path):
