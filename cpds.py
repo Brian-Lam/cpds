@@ -79,7 +79,7 @@ def process_queue():
 def compare_files(_old, _new, output_filename):
     global print_lock
 
-    cutoff = 50
+    cutoff = 70
     if get_extension(_new) == get_extension(_old) and _new != _old:
         try:
             response = subprocess.check_output(['moss/moss', _new, _old])
