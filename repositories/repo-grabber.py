@@ -19,14 +19,16 @@ for repo in repos:
   url = "git@bitbucket.org:" + owner + "/" + slug + ".git"
   if not (os.path.exists(slug)):
     subprocess.call(["git", "clone", url])
-    subprocess.call("find . -type f -iname \*.jpg -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.png -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.gif -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.pdf -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.mp3 -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.mp4 -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.docx -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.doc -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.exe -delete", shell=True);
-    subprocess.call("find . -type f -iname \*.pdb -delete", shell=True);
-    subprocess.call("find . -name 'node_modules' -exec rm -r '{}' \;", shell=True)
+
+## Clear out media and document files
+subprocess.call("find . -type f -iname \*.jpg -delete", shell=True);
+subprocess.call("find . -type f -iname \*.png -delete", shell=True);
+subprocess.call("find . -type f -iname \*.gif -delete", shell=True);
+subprocess.call("find . -type f -iname \*.pdf -delete", shell=True);
+subprocess.call("find . -type f -iname \*.mp3 -delete", shell=True);
+subprocess.call("find . -type f -iname \*.mp4 -delete", shell=True);
+subprocess.call("find . -type f -iname \*.docx -delete", shell=True);
+subprocess.call("find . -type f -iname \*.doc -delete", shell=True);
+subprocess.call("find . -type f -iname \*.exe -delete", shell=True);
+subprocess.call("find . -type f -iname \*.pdb -delete", shell=True);
+subprocess.call("find . -name 'node_modules' -exec rm -r '{}' \;", shell=True)
