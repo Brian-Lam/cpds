@@ -79,7 +79,7 @@ def process_queue():
 def compare_files(_old, _new, output_filename):
     global print_lock
 
-    cutoff = 70
+    cutoff = 50
     if get_extension(_new) == get_extension(_old) and _new != _old:
         try:
             response = subprocess.check_output(['moss/moss', _new, _old])
@@ -104,7 +104,7 @@ def compare_files(_old, _new, output_filename):
                     for _score in percentages:
                         file.write(str(_score) + '\n')
         except Exception as e:
-            sys.exit(0)
+            pass
         else:
             print_lock.acquire()
             print 'Okay: ' + url + "\n"
@@ -135,7 +135,6 @@ def moss_compare(new_files, old_files):
                 while (processing_queue.full()):
                     pass
 
-                # Submit to queue
                 processing_queue.put({"new_file": _new,
                     "old_file": _old,
                     "output_filename": output_filename})
