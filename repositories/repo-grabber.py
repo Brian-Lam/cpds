@@ -33,3 +33,4 @@ subprocess.call("find . -type f -iname \*.exe -delete", shell=True);
 subprocess.call("find . -type f -iname \*.pdb -delete", shell=True);
 subprocess.call("find . -type f -iname \*.DS_Store -delete", shell=True);
 subprocess.call("find . -name 'node_modules' -exec rm -r '{}' \;", shell=True)
+subprocess.call("find . -name '.git' -exec rm -r '{}' \;", shell=True)

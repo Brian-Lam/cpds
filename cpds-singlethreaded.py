@@ -4,11 +4,13 @@ import json
 import os
 import re
 import subprocess
+import traceback
 import sys
-from threading import Thread
 import requests
 import time
+import shutil, tempfile
 import concurrent.futures
+from threading import Thread
 from multiprocessing import Queue
 from multiprocessing import Lock
 from pprint import pprint
@@ -78,31 +80,55 @@ def process_queue():
             else:
                 compare_files(row["new_file"], row["old_file"], row["output_filename"])
     except KeyboardInterrupt:
-        print "MEH"
+        print ("here")
+        print traceback.format_exc()
         raise
 
 ## See if two files should be compared. Compare them if they are
 def compare_files(_old, _new, output_filename):
     global print_lock
+    global processing_queue
 
     cutoff = 50
 
     try:
-        matches = []
+        old_matches = []
+        new_matches = []
 
         for root, dirnames, filenames in os.walk(_old):
             for filename in filenames:
                 if filename.endswith(('.php', '.js', '.css', '.html', '.py', '.txt')):
-                    matches.append(os.path.join(root, filename))
+                    old_matches.append(os.path.join(root, filename))
         for root, dirnames, filenames in os.walk(_new):
             for filename in filenames:
                 if filename.endswith(('.php', '.js', '.css', '.html', '.py', '.txt')):
-                    matches.append(os.path.join(root, filename))
+                    new_matches.append(os.path.join(root, filename))
 
-        moss_arguments = ['moss/moss']
-        moss_arguments.extend(matches)
-        response = subprocess.check_output()
+        if (len(old_matches) < 1 or len(new_matches) < 1):
+            return
 
+        # Make temporary directory for files.
+        # Must put all files in the same directory because wildcard directory syntax
+        # has not been working in this situation.
+        old_temp = tempfile.mkdtemp()
+        new_temp = tempfile.mkdtemp()
+
+
+        # Move matches to temporary folder
+        for match in old_matches:
+            shutil.copy(match, old_temp)
+        for match in new_matches:
+            shutil.copy(match, new_temp)
+
+        old_files = str(old_temp) + "/*"
+        new_files = str(new_temp) + "/*"
+
+
+        # Call MOSS from command line
+        response = subprocess.check_output("moss/moss -d " + str(old_files) + " " +str(new_files), shell=True)
+        # Get response from command
+
+        # TODO: Add error handling
         url = get_url(response)
 
         high_score = get_high_percentages(url, cutoff)
@@ -124,13 +150,13 @@ def compare_files(_old, _new, output_filename):
                 for _score in percentages:
                     file.write(str(_score) + '\n')
         else:
-	        print_lock.acquire()
-	        print 'Okay: ' + url + "\n"
-	        print_lock.release()
-    except Exception as e:
-        print "Exception"
+            print_lock.acquire()
+            print "Okay: " + url
+            print "Approximately " + str(processing_queue.qsize()) + " left to process \n"
+            print_lock.release()
+    except Exception:
+        print traceback.format_exc()
         pass
-    print "Returning"
     return
 
 
@@ -147,9 +173,10 @@ def moss_compare(new_dirs, old_dirs):
         # For loop: m * n filepaths
         for _new in new_dirs:
             for _old in old_dirs:
-                processing_queue.put({"new_file": _new,
-                    "old_file": _old,
-                    "output_filename": output_filename})
+                if (_new != _old):
+                    processing_queue.put({"new_file": _new,
+                        "old_file": _old,
+                        "output_filename": output_filename})
 
         print "Queue populated. Approximately " + str(processing_queue.qsize()) + " in queue"
 
@@ -157,15 +184,14 @@ def moss_compare(new_dirs, old_dirs):
             "finished_processing": True
         })
 
-        # Start threads
-        num_worker_threads = 4
-        for i in range(num_worker_threads):
-            t = Thread(target=process_queue)
-            t.daemon = True
-            t.start()
-            print "Started thread " + str(i)
+        while (True):
+            row = processing_queue.get()
 
-        
+            if (row.has_key("finished_processing")):
+                print "Finished processing."
+                break
+            else:
+                compare_files(row["new_file"], row["old_file"], row["output_filename"])
 
     except KeyboardInterrupt as e:
         print "cancelled"
