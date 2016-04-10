@@ -74,7 +74,9 @@ def process_queue():
     try:
         while (True):
             row = processing_queue.get()
+
             if (row.has_key("finished_processing")):
+                process_queue.put(row)
                 print "Finished processing."
                 break
             else:
@@ -184,14 +186,13 @@ def moss_compare(new_dirs, old_dirs):
             "finished_processing": True
         })
 
-        while (True):
-            row = processing_queue.get()
-
-            if (row.has_key("finished_processing")):
-                print "Finished processing."
-                break
-            else:
-                compare_files(row["new_file"], row["old_file"], row["output_filename"])
+        # Start threads
+        num_worker_threads = 4
+        for i in range(num_worker_threads):
+            t = Thread(target=process_queue)
+            t.daemon = True
+            t.start()
+            print "Started thread " + str(i)
 
     except KeyboardInterrupt as e:
         print "cancelled"
