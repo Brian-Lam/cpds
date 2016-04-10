@@ -1,4 +1,4 @@
-# Code Plagiarism Detection Scritps
+# Code Plagiarism Detection Script
 Created for CSE 330 at Washington University in St. Louis. This will pull repositories from a bitbucket account and send files to Moss. 
 
 
